@@ -8,16 +8,19 @@ pipeline {
         CLUSTER = credentials("cluster_name") // secret text for the cluster name. I set it manually in Jenkins credentials
         CLUSTER_ZONE = credentials("cluster_zone") // secret text for the cluster zone. I set it manually in Jenkins credentials
     }
-    agent{   // create a node under the name gcloud that running google/cloud-sdk:latest docker image 
+    agent{   // create a node under the name gcloud that running google/cloud-sdk:latest docker image
         kubernetes {
         label 'sample-app'
         yaml """
             apiVersion: v1
             kind: Pod
             metadata:
-            labels: 
+            labels:
               component: ci
             spec:
+              # CHANGE 1 (Ahmad): run the build pod on the dedicated Jenkins node, away from MySQL/Redis
+              nodeSelector:
+                pool: jenkins
               containers:
               # Use service account that can deploy to all namespaces
               - name: gcloud
@@ -68,11 +71,13 @@ pipeline {
                                 sh 'kubectl delete deployment binarycalculator-deployment'
                             }
                             catch (Exception e){
-                                
+
                             }
                         }
                         // create a new deployment
                         sh 'kubectl create deployment binarycalculator-deployment --image $IMAGE_TAG --port=8080'
+                        // CHANGE 2 (Ahmad): run the webapp pod on the dedicated Jenkins node, away from MySQL/Redis
+                        sh '''kubectl patch deployment binarycalculator-deployment -p '{"spec":{"template":{"spec":{"nodeSelector":{"pool":"jenkins"}}}}}' '''
 
                     }
                 }
@@ -92,7 +97,7 @@ pipeline {
                                 sh 'kubectl expose deployment binarycalculator-deployment --type=LoadBalancer --name=binarycalculator-service'
                             }
                             catch (Exception e){
-                                
+
                             }
                         }
                         // display the service IP
